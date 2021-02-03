@@ -3,11 +3,12 @@
 
 typedef enum return_type_e {
     SUCCESS = 0,
-    KEY_NOT_FOUND = -1,
-    KEY_EXISTS = -2,
-    KEY_INVALID = -3,
-    VALUE_INVALID = -4,
-    TABLE_INVALID = -5,
+    KEY_NOT_FOUND = 1,
+    KEY_EXISTS = 2,
+    KEY_INVALID = 3,
+    VALUE_INVALID = 4,
+    TABLE_INVALID = 5,
+    INDEX_ERROR = 6,
 } return_type_e;
 
 /** hashmap_table_create
@@ -72,5 +73,9 @@ return_type_e hashmap_search(void *table_handler, const char * const key, const 
   * @return SUCCESS, TABLE_INVALID
 */
 return_type_e hashmap_dump(void *table_handler);
+
+return_type_e hashmap_get_bucket(void *table_handler, int index, char *buffer);
+
+int hashmap_get_size(void *table_handler);
 
 #endif

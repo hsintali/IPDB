@@ -208,7 +208,7 @@ return_type_e hashmap_dump(void *table_handler)
     printf("---------- table with size: %d ----------\n", table->size);
     for(int i = 0; i < table->capacity; ++i) {
         hashmap_node_t *node = table->buckets[i];
-
+        if(node->next == NULL) continue;
         while(node != NULL) {
             printf("index: %d | key: %s | value: %s | value_length: %d \n", i, node->key, node->value, node->str_length);
             node = node->next;
@@ -218,6 +218,36 @@ return_type_e hashmap_dump(void *table_handler)
     return SUCCESS;
 }
 
+return_type_e hashmap_get_bucket(void *table_handler, int index, char *buffer)
+{
+    hashmap_table_t *table = (hashmap_table_t *)table_handler;
+    if(table == NULL) {
+        return TABLE_INVALID;
+    }
+
+    if(index < 0 || index >= table->capacity) {
+        return INDEX_ERROR;
+    }
+
+    hashmap_node_t *node = table->buckets[index];
+    if(node->next == NULL) {
+        return SUCCESS;
+    }
+
+    node = node->next;
+
+    while(node != NULL) {
+        sprintf(buffer, "%s%s %s\n", buffer, node->key, node->value);
+        node = node->next;
+    }       
+
+    return SUCCESS;
+}
+
+int hashmap_get_size(void *table_handler)
+{
+    return ((hashmap_table_t *)table_handler)->size;
+}
 /***************************** private members **********************************/
 static hashmap_node_t* __hashmap_node_create(const char * const key, const char * const value)
 {

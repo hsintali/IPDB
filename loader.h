@@ -28,4 +28,22 @@ loader_return_type_e load_location_csv_to_hashmap(char *path, void *map_geoid);
 */
 loader_return_type_e load_ipdb_csv_to_hashmap(char *path, void *map_ipdb, void *map_geoid);
 
+/** load_mydb_csv_to_hashmap
+  * 
+  
+  * @para_in    path        A pointer to the csv path
+  * @para_in    map_mydb    A pointer to the mydb table handler
+  * @return LOADER_SUCCESS, LOADER_PATH_NOT_FOUND
+*/
+loader_return_type_e load_mydb_csv_to_hashmap(char *path, void *map_mydb);
+
+/** save_hashmap_mydb_to_csv
+  * 
+  
+  * @para_in    path        A pointer to the csv path
+  * @para_in    map_mydb    A pointer to the mydb table handler
+  * @return LOADER_SUCCESS, LOADER_PATH_NOT_FOUND
+*/
+loader_return_type_e save_hashmap_mydb_to_csv(char *path, void *map_mydb);
+
 #endif

@@ -188,3 +188,72 @@ loader_return_type_e load_ipdb_csv_to_hashmap(char *path, void *map_ipdb, void *
 
     return LOADER_SUCCESS;
 }
+
+loader_return_type_e load_mydb_csv_to_hashmap(char *path, void *map_mydb)
+{
+    FILE *fp = fopen(path, "r");
+    if(fp == NULL) {
+        return LOADER_PATH_NOT_FOUND;
+    }
+
+    size_t key_length = 256;
+    char *key = malloc(sizeof(char) * key_length);
+
+    size_t value_length = 256;
+    char *value = malloc(sizeof(char) * value_length);
+
+    char *line_buf = NULL;
+    size_t line_buf_size = 0;
+
+    while(!feof(fp)) {
+        getline(&line_buf, &line_buf_size, fp);
+        if(strlen(line_buf) == 0) {
+            continue;
+        }
+
+        if(strchr(line_buf, '\n') == NULL) {
+            continue;
+        }
+
+        char *token = strtok(line_buf, " ");
+        sprintf(key, "%s", token);
+
+        token = strtok(NULL, " ");
+        sprintf(value, "%s", token);
+        char *last_newline = strchr(value, '\n');
+        if(last_newline != NULL) {
+            *last_newline = '\0';
+        }       
+
+        hashmap_insert(map_mydb, key, value);
+        fflush(fp);
+    }
+
+    free(value);
+    free(key);
+    free(line_buf);
+    fclose(fp);
+
+    return LOADER_SUCCESS;
+}
+
+loader_return_type_e save_hashmap_mydb_to_csv(char *path, void *map_mydb)
+{
+    FILE *fp = fopen(path, "w");
+    if(fp == NULL) {
+        return LOADER_PATH_NOT_FOUND;
+    }
+
+    char buffer[512];
+
+    int index = 0;
+    while(hashmap_get_bucket(map_mydb, index++, buffer) == SUCCESS) {
+        if(strlen(buffer) != 0) {
+            fprintf(fp, "%s", buffer);
+        }
+        memset(buffer, '\0', sizeof(buffer));
+    }
+
+    fclose(fp);
+    return LOADER_SUCCESS;
+}
