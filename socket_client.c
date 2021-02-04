@@ -12,19 +12,6 @@
 
 int main(int argc, char **argv)
 {
-    // ipdb_message_t *msg;
-    // msg = malloc(sizeof(ipdb_message_t) + 1024);
-    // ipdb_serialized_message(msg, 'A', "TYU", "123456");
-
-    // char o;
-    // char k[256];
-    // char v[256];
-
-    // ipdb_deserialized_message(msg, &o, k, v);
-    // printf("%c, %s, %s\n", o, k, v);
-
-    // return 0;
-
     // create a socket
     int client_socket = socket(AF_INET, SOCK_STREAM, 0);
 
@@ -60,12 +47,14 @@ int main(int argc, char **argv)
             break;
         }
 
+        memset(key, '\0', 256);
         if(opcode != 'S') {
             printf("Key:");
             fgets(key, 256, stdin);
             key[strlen(key) - 1] = '\0';
         }
 
+        memset(value, '\0', 256);
         if(opcode == 'C' || opcode == 'U') {
             printf("value:");
             fgets(value, 256, stdin);

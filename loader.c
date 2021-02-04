@@ -245,6 +245,7 @@ loader_return_type_e save_hashmap_mydb_to_csv(char *path, void *map_mydb)
     }
 
     char buffer[512];
+    memset(buffer, '\0', sizeof(buffer));
 
     int index = 0;
     while(hashmap_get_bucket(map_mydb, index++, buffer) == SUCCESS) {

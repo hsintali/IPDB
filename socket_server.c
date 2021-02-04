@@ -7,10 +7,10 @@
 #include <string.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/select.h>
 #include <netinet/in.h>
+#include <arpa/inet.h>
 #include <unistd.h>
-#include <pthread.h>
-#include <fcntl.h>
 
 
 /***************************** private attribute **********************************/
@@ -25,48 +25,34 @@ static char return_message[][30] = {"SUCCESS",
                                     "KEY INVALID",
                                     "VALUE INVALID",
                                     "TABLE INVALID"};
-static pthread_mutex_t mutex;
 
 
 /***************************** private function declare **********************************/
-static void* connection_handler(void *arg_client_socket);
+static int connection_handler(int client_socket);
 static int receive_message(int socket_id, char *opcode, char *key, char *value);
 static void operate(char opcode, char *key, char *value, char *response);
 
 
 /***************************** private function definition **********************************/
-static void* connection_handler(void *arg_client_socket)
+static int connection_handler(int client_socket)
 {
-    int client_socket = *((int*) arg_client_socket);
-
-    char response[message_size];
-
-    // send welcome message to the client
-    char *welcome_message = "Hi there! I am your connection handler.\nPlease send me the operating message to operate IPDB.\n";
-    send(client_socket, welcome_message, strlen(welcome_message), 0);
-
     char opcode = '\0';
     char key[buffer_size];
     char value[buffer_size];
-
-    while(1)
-    {
-        if(receive_message(client_socket, &opcode, key, value) != 0) {
-            break;
-        }
-        printf("(Client - %d): opcode:%c, key:%s(%d), value:%s(%d)\n", client_socket, opcode, key, strlen(key), value, strlen(value));
-        
-        pthread_mutex_lock(&mutex);
-        operate(opcode, key, value, response);
-        pthread_mutex_unlock(&mutex);
-
-        send(client_socket, response, sizeof(response), 0);
-        printf("(Client - %d): response: %s\n", client_socket, response);
+   
+    if(receive_message(client_socket, &opcode, key, value) != 0) {
+        return -1;
     }
+    printf("(Client - %d): opcode:%c, key:%s(%d), value:%s(%d)\n", client_socket, opcode, key, strlen(key), value, strlen(value));
+    
+    char response[message_size];
 
-    printf("(Client - %d): close connection\n", client_socket);
-    close(client_socket);
-    pthread_exit(NULL);
+    operate(opcode, key, value, response);
+
+    send(client_socket, response, sizeof(response), 0);
+    printf("(Client - %d): response: %s\n", client_socket, response);
+
+    return 0;
 }
 
 static int receive_message(int socket_id, char *opcode, char *key, char *value)
@@ -79,7 +65,7 @@ static int receive_message(int socket_id, char *opcode, char *key, char *value)
     };
 
     size_t data_size = ((ipdb_message_t *)buffer)->packet_length - header_size;
-    if(recv(socket_id, buffer + header_size, data_size, 0) <= 0) {
+    if(data_size > 0 && recv(socket_id, buffer + header_size, data_size, 0) <= 0) {
         return -1;
     };
   
@@ -179,18 +165,18 @@ int main(int argc, char **args)
     printf("Loading ipv4 data ...");
     char ipv4_path[256];
     sprintf(ipv4_path, "%s/%s", args[1], args[2]);
-    if(load_ipdb_csv_to_hashmap(ipv4_path, map_ipdb, map_geoid) != LOADER_SUCCESS) {
-        printf("IPv4: PATH NOT FOUND!\n");
-    }
+    // if(load_ipdb_csv_to_hashmap(ipv4_path, map_ipdb, map_geoid) != LOADER_SUCCESS) {
+    //     printf("IPv4: PATH NOT FOUND!\n");
+    // }
     printf("OK\n");
 
     // load ipv6 csv to hashmap with mapped geoid
     printf("Loading ipv6 data ...");
     char ipv6_path[256];
     sprintf(ipv6_path, "%s/%s", args[1], args[3]);
-    if(load_ipdb_csv_to_hashmap(ipv6_path, map_ipdb, map_geoid) != LOADER_SUCCESS) {
-        printf("IPv6: PATH NOT FOUND!\n");
-    }
+    // if(load_ipdb_csv_to_hashmap(ipv6_path, map_ipdb, map_geoid) != LOADER_SUCCESS) {
+    //     printf("IPv6: PATH NOT FOUND!\n");
+    // }
     printf("OK\n");
     
     hashmap_table_destroy(map_geoid);
@@ -231,29 +217,49 @@ int main(int argc, char **args)
     listen(server_socket, 5);
     printf("Listening for incoming connections ...\n");
 
-    // pthread
-    pthread_t thread_id;
-    pthread_mutex_init(&mutex, NULL);
+    // select
+    fd_set active_fd_set, read_fd_set;
+    FD_ZERO(&active_fd_set);
+    FD_SET(server_socket,&active_fd_set);
 
     // client socket
-    int client_socket;
+    int client_socket = 0;
     struct sockaddr_in client_address;
     socklen_t client_address_size;
 
     while(1) {
-        // accept incoming socket
-        client_socket = accept(server_socket, (struct sockaddr*) &client_address, &client_address_size);
-        if(client_socket == -1) {
-            printf("INVALID socket!\n");
-            continue;
+        read_fd_set = active_fd_set;
+        if(select(FD_SETSIZE, &read_fd_set, NULL, NULL, NULL) < 0) {
+            printf("\"select\" error!\n");
+            break;
         }
-        printf("(Client - %d): connection accepted\n", client_socket);
 
-        // create new thread for each connection
-        if(pthread_create( &thread_id, NULL, connection_handler, (void*) &client_socket) != 0) {
-            printf("(Client - %d): thread creating failded!\n", client_socket);
+        for(int i = 0; i < FD_SETSIZE; ++i) {
+            if(FD_ISSET(i, &read_fd_set)) {
+                // accept incoming socket
+                if(i == server_socket) {
+                    client_socket = accept(server_socket, (struct sockaddr*) &client_address, &client_address_size);
+                    if(client_socket < 0) {
+                        printf("INVALID socket!\n");
+                        continue;
+                    }
+                    printf("(Client - %d): connection accepted\n", client_socket);
+                    printf("(Server): connect from host (%s), port (%d)\n", inet_ntoa(client_address.sin_addr), ntohs(client_address.sin_port));
+                    FD_SET(client_socket, &active_fd_set);
+
+                     // send welcome message to the client
+                    char *welcome_message = "Hi there! I am your connection handler.\nPlease send me the operating message to operate IPDB.\n";
+                    send(client_socket, welcome_message, strlen(welcome_message), 0);
+                }
+                else { // processing received message
+                    if(connection_handler(i) != 0) {
+                        close(i);
+                        FD_CLR(i, &active_fd_set);
+                        printf("(Client - %d): close connection\n", client_socket);
+                    }
+                }
+            }
         }
-        printf("(Client - %d): handler thread assigned\n", client_socket);
     }
 
     close(server_socket);
