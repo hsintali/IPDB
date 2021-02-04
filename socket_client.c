@@ -12,6 +12,11 @@
 
 int main(int argc, char **argv)
 {
+    if(argc != 2) {
+        printf("Parameter error!\n");
+        return 1;
+    }
+    
     // create a socket
     int client_socket = socket(AF_INET, SOCK_STREAM, 0);
 
@@ -19,7 +24,7 @@ int main(int argc, char **argv)
     struct sockaddr_in server_address;
     server_address.sin_family = AF_INET;
     server_address.sin_port = htons(9002);
-    server_address.sin_addr.s_addr = inet_addr("192.168.11.246");
+    server_address.sin_addr.s_addr = inet_addr(argv[1]);
 
     if(connect( client_socket, (struct sockaddr *) &server_address, sizeof(server_address) ) != 0)
     {

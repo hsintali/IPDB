@@ -165,18 +165,18 @@ int main(int argc, char **args)
     printf("Loading ipv4 data ...");
     char ipv4_path[256];
     sprintf(ipv4_path, "%s/%s", args[1], args[2]);
-    // if(load_ipdb_csv_to_hashmap(ipv4_path, map_ipdb, map_geoid) != LOADER_SUCCESS) {
-    //     printf("IPv4: PATH NOT FOUND!\n");
-    // }
+    if(load_ipdb_csv_to_hashmap(ipv4_path, map_ipdb, map_geoid) != LOADER_SUCCESS) {
+        printf("IPv4: PATH NOT FOUND!\n");
+    }
     printf("OK\n");
 
     // load ipv6 csv to hashmap with mapped geoid
     printf("Loading ipv6 data ...");
     char ipv6_path[256];
     sprintf(ipv6_path, "%s/%s", args[1], args[3]);
-    // if(load_ipdb_csv_to_hashmap(ipv6_path, map_ipdb, map_geoid) != LOADER_SUCCESS) {
-    //     printf("IPv6: PATH NOT FOUND!\n");
-    // }
+    if(load_ipdb_csv_to_hashmap(ipv6_path, map_ipdb, map_geoid) != LOADER_SUCCESS) {
+        printf("IPv6: PATH NOT FOUND!\n");
+    }
     printf("OK\n");
     
     hashmap_table_destroy(map_geoid);
@@ -190,7 +190,7 @@ int main(int argc, char **args)
     }
     printf("OK\n");
 
-    printf("Total %d records in ipdb\n", hashmap_get_size(map_ipdb));
+    printf("Total %d records in ipdb\n", hashmap_get_size(map_ipdb) + hashmap_get_size(map_mydb));
 
     // create server socket
     int server_socket = socket(AF_INET, SOCK_STREAM, 0);
@@ -255,7 +255,7 @@ int main(int argc, char **args)
                     if(connection_handler(i) != 0) {
                         close(i);
                         FD_CLR(i, &active_fd_set);
-                        printf("(Client - %d): close connection\n", client_socket);
+                        printf("(Client - %d): close connection\n", i);
                     }
                 }
             }
