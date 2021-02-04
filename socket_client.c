@@ -1,3 +1,5 @@
+#include "ipdb_protocol.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -10,6 +12,19 @@
 
 int main(int argc, char **argv)
 {
+    // ipdb_message_t *msg;
+    // msg = malloc(sizeof(ipdb_message_t) + 1024);
+    // ipdb_serialized_message(msg, 'A', "TYU", "123456");
+
+    // char o;
+    // char k[256];
+    // char v[256];
+
+    // ipdb_deserialized_message(msg, &o, k, v);
+    // printf("%c, %s, %s\n", o, k, v);
+
+    // return 0;
+
     // create a socket
     int client_socket = socket(AF_INET, SOCK_STREAM, 0);
 
@@ -31,12 +46,12 @@ int main(int argc, char **argv)
     recv(client_socket, server_response, sizeof(server_response), 0);
     printf("(Server):%s \n", server_response);
 
-    while(1) {
-        char opcode;
-        char key[256];
-        char value[256];
-        char message[1024];
+    char opcode;
+    char key[256];
+    char value[256];
+    ipdb_message_t *message = malloc(sizeof(ipdb_message_t) + 1024);
 
+    while(1) {
         printf("Opcode:");
         scanf("%s", &opcode);
         getchar();
@@ -45,18 +60,23 @@ int main(int argc, char **argv)
             break;
         }
 
-        printf("Key:");
-        fgets(key, 256, stdin);
-        key[strlen(key) - 1] = '\0';
+        if(opcode != 'S') {
+            printf("Key:");
+            fgets(key, 256, stdin);
+            key[strlen(key) - 1] = '\0';
+        }
 
-        printf("value:");
-        fgets(value, 256, stdin);
-        value[strlen(value) - 1] = '\0';
+        if(opcode == 'C' || opcode == 'U') {
+            printf("value:");
+            fgets(value, 256, stdin);
+            value[strlen(value) - 1] = '\0';
+        }
 
-        sprintf(message, "G%c%c%c%s%s", opcode, strlen(key) + 1, strlen(value) + 1, key, value);
+        ipdb_serialized_message(message, opcode, key, value);
 
         // send data to the server
-        send(client_socket, message, strlen(message), 0);
+        send(client_socket, message, message->packet_length, 0);
+        printf("send length: %d\n", message->packet_length);
 
         // reveive data from the server
         recv(client_socket, server_response, sizeof(server_response), 0);

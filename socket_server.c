@@ -1,5 +1,6 @@
 #include "hashmap.h"
 #include "loader.h"
+#include "ipdb_protocol.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -29,7 +30,7 @@ static pthread_mutex_t mutex;
 
 /***************************** private function declare **********************************/
 static void* connection_handler(void *arg_client_socket);
-static int receive_message(int socket_id, char *message, char *opcode, char *key, char *value);
+static int receive_message(int socket_id, char *opcode, char *key, char *value);
 static void operate(char opcode, char *key, char *value, char *response);
 
 
@@ -38,11 +39,7 @@ static void* connection_handler(void *arg_client_socket)
 {
     int client_socket = *((int*) arg_client_socket);
 
-    char client_message[message_size];
-    memset(client_message, '\0', sizeof(client_message));
-
     char response[message_size];
-    memset(response, '\0', sizeof(response));
 
     // send welcome message to the client
     char *welcome_message = "Hi there! I am your connection handler.\nPlease send me the operating message to operate IPDB.\n";
@@ -54,17 +51,11 @@ static void* connection_handler(void *arg_client_socket)
 
     while(1)
     {
-        opcode = '\0';
-        memset(key, '\0', sizeof(key));
-        memset(value, '\0', sizeof(value));
-
-        if(receive_message(client_socket, client_message, &opcode, key, value) != 0) {
+        if(receive_message(client_socket, &opcode, key, value) != 0) {
             break;
         }
         printf("(Client - %d): opcode:%c, key:%s(%d), value:%s(%d)\n", client_socket, opcode, key, strlen(key), value, strlen(value));
         
-        memset(response, '\0', sizeof(response));
-
         pthread_mutex_lock(&mutex);
         operate(opcode, key, value, response);
         pthread_mutex_unlock(&mutex);
@@ -78,76 +69,22 @@ static void* connection_handler(void *arg_client_socket)
     pthread_exit(NULL);
 }
 
-static int receive_message(int socket_id, char *message, char *opcode, char *key, char *value)
+static int receive_message(int socket_id, char *opcode, char *key, char *value)
 {
     char buffer[buffer_size];
-    char *start_delim = NULL;
-    size_t key_length = 0;
-    size_t value_length = 0;
 
-    int is_full_header = 0;
+    size_t header_size = sizeof(ipdb_message_t);
+    if(recv(socket_id, buffer, header_size, 0) <= 0) {
+        return -1;
+    };
 
-    // to determine if message is empty, if not, we need to skip the first recv to process the message
-    int is_skip = 0;
-    start_delim = strstr(message, "G");
-    if(start_delim != NULL) {
-        strcpy(message, start_delim);
-        is_skip = 1;
-    }
-    else {
-        memset(message, '\0', sizeof(message));
-    }
-
-    while(1) {
-        if(!is_skip) {
-            memset(buffer, '\0', sizeof(buffer));
-            if(recv(socket_id, buffer, sizeof(buffer), 0) <= 0) {
-                return -1;
-            };
-            strcat(message, buffer);
-        }
-        is_skip = 0;
-        size_t cur_msg_len = strlen(message);
-
-        // parse message header
-        if(!is_full_header) {
-            start_delim = strstr(message, "G");
-            if(start_delim == NULL) {
-                memset(message, '\0', sizeof(message));
-                continue;
-            }
-
-            // need to receive a full header
-            if(cur_msg_len - (start_delim - message) < 4) {
-                continue;
-            }
-
-            *opcode = *(start_delim + 1);
-            key_length = (size_t) *(start_delim + 2) - 1;
-            value_length = (size_t) *(start_delim + 3) - 1;
-            is_full_header = 1;
-        }
-
-        // continue recv from client untill received a full format message
-        if( cur_msg_len >= (start_delim - message) + (4 + key_length + value_length) ) {
-            break;
-        }
-    }
-
-    // set key
-    start_delim += 4;
-    memset(key, '\0', sizeof(key));
-    strncpy(key, start_delim, key_length);
-    start_delim += key_length;
-
-    // set value
-    memset(value, '\0', sizeof(value));
-    strncpy(value, start_delim, value_length);
-    start_delim += value_length;
-
-    // forward to remaining message
-    strcpy(message, start_delim);
-
+    size_t data_size = ((ipdb_message_t *)buffer)->packet_length - header_size;
+    if(recv(socket_id, buffer + header_size, data_size, 0) <= 0) {
+        return -1;
+    };
+  
+    ipdb_deserialized_message((ipdb_message_t *)buffer, opcode, key, value);
+        
     return 0;
 }
 
