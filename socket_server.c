@@ -252,9 +252,6 @@ static const char* process_message(rd_kafka_message_t *message)
         if(status != SUCCESS) {
             status = hashmap_search(map_ipdb, (const char *)message->payload, &search_value);
         }
-        if(status == SUCCESS) {
-            printf("----> %s \n", search_value);
-        }
     }
 
     return search_value;
@@ -314,7 +311,7 @@ int main(int argc, char **args)
     char geoid_path[256];
     sprintf(geoid_path, "%s/%s", args[1], args[4]);
     if(load_location_csv_to_hashmap(geoid_path, map_geoid) != LOADER_SUCCESS) {
-        printf("GeoID: PATH NOT FOUND!\n");
+        printf("GeoID: %s - PATH NOT FOUND!\n", geoid_path);
     }
     printf("OK\n");
     
@@ -323,7 +320,7 @@ int main(int argc, char **args)
     char ipv4_path[256];
     sprintf(ipv4_path, "%s/%s", args[1], args[2]);
     if(load_ipdb_csv_to_hashmap(ipv4_path, map_ipdb, map_geoid) != LOADER_SUCCESS) {
-        printf("IPv4: PATH NOT FOUND!\n");
+        printf("IPv4: %s - PATH NOT FOUND!\n", ipv4_path);
     }
     printf("OK\n");
 
@@ -332,7 +329,7 @@ int main(int argc, char **args)
     char ipv6_path[256];
     sprintf(ipv6_path, "%s/%s", args[1], args[3]);
     if(load_ipdb_csv_to_hashmap(ipv6_path, map_ipdb, map_geoid) != LOADER_SUCCESS) {
-        printf("IPv6: PATH NOT FOUND!\n");
+        printf("IPv6: %s - PATH NOT FOUND!\n", ipv6_path);
     }
     printf("OK\n");
     
@@ -415,7 +412,7 @@ int main(int argc, char **args)
                 break;
             }
             else {
-                fprintf(stderr, "%% Enqueued message (%zd bytes) " "for topic %s\n", strlen(out_message), output_topic);
+                fprintf(stderr, "%% Enqueued message %s (%zd bytes) for topic %s\n", out_message, strlen(out_message), output_topic);
             }
         }
         rd_kafka_poll(producer, 0);
