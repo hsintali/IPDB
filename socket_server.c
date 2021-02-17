@@ -12,6 +12,12 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 
+#include <sys/time.h>
+#include <signal.h>
+#include <ctype.h>
+
+#include <librdkafka/rdkafka.h>
+
 
 /***************************** private attribute **********************************/
 static void *map_ipdb;
@@ -25,12 +31,38 @@ static char return_message[][30] = {"SUCCESS",
                                     "KEY INVALID",
                                     "VALUE INVALID",
                                     "TABLE INVALID"};
+static volatile sig_atomic_t run = 1;
+const char *brokers = "localhost";
+const char *input_topic = "prefixes";
+const char *output_topic = "location";
 
 
+                                    
 /***************************** private function declare **********************************/
 static int connection_handler(int client_socket);
 static int receive_message(int socket_id, char *opcode, char *key, char *value);
 static void operate(char opcode, char *key, char *value, char *response);
+static void stop(int sig);
+
+/**
+ * @brief Create the input consumer.
+ */
+static rd_kafka_t* create_input_consumer(const char *brokers, const char *input_topic);
+
+/**
+ * @brief Process a message
+ */
+static const char* process_message(rd_kafka_message_t *message);
+
+/**
+ * @brief Message delivery report callback.
+ */
+static void dr_msg_cb(rd_kafka_t *rk, const rd_kafka_message_t *message, void *opaque);
+
+/**
+ * @brief Create a producer.
+ */
+static rd_kafka_t* create_output_producer(const char *brokers, const char *output_topic);
 
 
 /***************************** private function definition **********************************/
@@ -139,6 +171,130 @@ static void operate(char opcode, char *key, char *value, char *response)
     }
 }
 
+static void stop (int sig)
+{
+    run = 0;
+}
+
+static rd_kafka_t *create_input_consumer(const char *brokers, const char *input_topic)
+{
+    rd_kafka_t *kafka_handler;
+    rd_kafka_conf_t *config = rd_kafka_conf_new();
+    rd_kafka_topic_partition_list_t *subscription;
+    rd_kafka_resp_err_t err;
+    char err_str[512];
+    const char *groupid = "ipdb_group";
+
+    if(rd_kafka_conf_set(config, "bootstrap.servers", brokers, err_str, sizeof(err_str)) != RD_KAFKA_CONF_OK) {
+        fprintf(stderr, "%s\n", err_str);
+        rd_kafka_conf_destroy(config);
+        return NULL;
+    }
+    if(rd_kafka_conf_set(config, "group.id", groupid, err_str, sizeof(err_str)) != RD_KAFKA_CONF_OK) {
+        fprintf(stderr, "%s\n", err_str);
+        rd_kafka_conf_destroy(config);
+        return NULL;
+    }
+    if(rd_kafka_conf_set(config, "auto.offset.reset", "earliest", err_str, sizeof(err_str)) != RD_KAFKA_CONF_OK) {
+        fprintf(stderr, "%s\n", err_str);
+        rd_kafka_conf_destroy(config);
+        return NULL;
+    }
+
+    kafka_handler = rd_kafka_new(RD_KAFKA_CONSUMER, config, err_str, sizeof(err_str));
+    if (!kafka_handler) {
+        rd_kafka_conf_destroy(config);
+        fprintf(stderr, "Failed to create consumer: %s", err_str);
+    }
+
+    // rd_kafka_conf_destroy(config);
+    config = NULL;
+
+    rd_kafka_poll_set_consumer(kafka_handler);
+
+    subscription = rd_kafka_topic_partition_list_new(1);
+    rd_kafka_topic_partition_list_add(subscription, input_topic, RD_KAFKA_PARTITION_UA);
+
+    err = rd_kafka_subscribe(kafka_handler, subscription);
+    if(err) {
+        fprintf(stderr, "%% Failed to subscribe to %d topics: %s\n", subscription->cnt, rd_kafka_err2str(err));
+        rd_kafka_topic_partition_list_destroy(subscription);
+        rd_kafka_destroy(kafka_handler);
+        return NULL;
+    }
+    rd_kafka_topic_partition_list_destroy(subscription);
+
+    return kafka_handler;
+}
+
+static const char* process_message(rd_kafka_message_t *message)
+{
+    const char *search_value = NULL;
+
+    if(message) {
+        if (message->err) {
+            fprintf(stderr, "%% Consumer error: %s\n", rd_kafka_message_errstr(message));
+            rd_kafka_message_destroy(message);
+            return NULL;
+        }
+        printf("%% Message on %s [%"PRId32"] at offset %"PRId64":\n", rd_kafka_topic_name(message->rkt), message->partition, message->offset);
+
+        if(message->key) {
+            printf("%% Key: %.*s (%d bytes)\n", (int)message->key_len, (const char *)message->key, (int)message->key_len);
+        }
+        if(message->payload) {
+            printf("%% Value: %.*s (%d bytes)\n", (int)message->len, (const char *)message->payload, (int)message->len);
+        }
+
+        // lookup hashmap
+        return_type_e status;
+        status = hashmap_search(map_mydb, (const char *)message->payload, &search_value);
+        if(status != SUCCESS) {
+            status = hashmap_search(map_ipdb, (const char *)message->payload, &search_value);
+        }
+        if(status == SUCCESS) {
+            printf("----> %s \n", search_value);
+        }
+    }
+
+    return search_value;
+}
+
+static void dr_msg_cb(rd_kafka_t *rk, const rd_kafka_message_t *message, void *opaque) {
+    if (message->err) {
+        fprintf(stderr, "%% Message delivery failed: %s\n", rd_kafka_err2str(message->err));
+    }
+    else {
+        fprintf(stderr, "%% Message delivered (%zd bytes, " "partition %"PRId32")\n", message->len, message->partition);
+    }
+}
+
+static rd_kafka_t* create_output_producer(const char *brokers, const char *output_topic)
+{
+    rd_kafka_t *kafka_handler;
+    rd_kafka_conf_t *config = rd_kafka_conf_new();
+    rd_kafka_resp_err_t err;
+    char err_str[512];
+
+    if(rd_kafka_conf_set(config, "bootstrap.servers", brokers, err_str, sizeof(err_str)) != RD_KAFKA_CONF_OK) {
+        fprintf(stderr, "%s\n", err_str);
+        rd_kafka_conf_destroy(config);
+        return NULL;
+    }
+
+    rd_kafka_conf_set_dr_msg_cb(config, dr_msg_cb);
+
+    kafka_handler = rd_kafka_new(RD_KAFKA_PRODUCER, config, err_str, sizeof(err_str));
+    if (!kafka_handler) {
+        rd_kafka_conf_destroy(config);
+        fprintf(stderr, "Failed to create consumer: %s", err_str);
+    }
+
+    // rd_kafka_conf_destroy(config);
+    config = NULL;
+
+    return kafka_handler;
+}
 /***************************** main **********************************/
 int main(int argc, char **args)
 {
@@ -147,6 +303,7 @@ int main(int argc, char **args)
         return 1;
     }
 
+    // hashmap
     int map_size = 100000;
     void *map_geoid = hashmap_table_create(map_size);
     map_ipdb = hashmap_table_create(map_size);
@@ -221,15 +378,52 @@ int main(int argc, char **args)
     fd_set active_fd_set, read_fd_set;
     FD_ZERO(&active_fd_set);
     FD_SET(server_socket,&active_fd_set);
+    struct timeval timeout = {0, 1};
 
     // client socket
     int client_socket = 0;
     struct sockaddr_in client_address;
     socklen_t client_address_size;
 
-    while(1) {
+    // kafka
+    rd_kafka_t *consumer, *producer;
+    consumer = create_input_consumer(brokers, input_topic);
+    producer = create_output_producer(brokers, output_topic);
+ 
+    /* Signal handler for clean shutdown */
+    signal(SIGINT, stop);
+
+    while(run) {
+        // kafka consume/process message
+        rd_kafka_message_t *input_message;
+        input_message = rd_kafka_consumer_poll(consumer, 1);
+        const char *out_message = process_message(input_message);
+
+        // kafka produce message
+        rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_INVALID_MSG;
+        while(err != RD_KAFKA_RESP_ERR_NO_ERROR && out_message != NULL) {
+            err = rd_kafka_producev(producer, RD_KAFKA_V_TOPIC(output_topic),
+                                              RD_KAFKA_V_KEY(input_message->payload, input_message->len),
+                                              RD_KAFKA_V_VALUE(out_message, strlen(out_message)),
+                                              RD_KAFKA_V_END);
+            if(err == RD_KAFKA_RESP_ERR__QUEUE_FULL) {
+                rd_kafka_poll(producer, 100);
+                continue;
+            }
+            else if(err) {
+                fprintf(stderr, "%% Failed to produce to topic %s: %s\n", output_topic, rd_kafka_err2str(err));
+                break;
+            }
+            else {
+                fprintf(stderr, "%% Enqueued message (%zd bytes) " "for topic %s\n", strlen(out_message), output_topic);
+            }
+        }
+        rd_kafka_poll(producer, 0);
+        if(input_message) rd_kafka_message_destroy(input_message);
+        
+        // set select read_fd_set
         read_fd_set = active_fd_set;
-        if(select(FD_SETSIZE, &read_fd_set, NULL, NULL, NULL) < 0) {
+        if(select(FD_SETSIZE, &read_fd_set, NULL, NULL, &timeout) < 0) {
             printf("\"select\" error!\n");
             break;
         }
@@ -262,11 +456,20 @@ int main(int argc, char **args)
         }
     }
 
+    /* Close the consumer: commit final offsets and leave the group. */
+    fprintf(stderr, "%% Closing consumer\n");
+    rd_kafka_consumer_close(consumer);
+
+    // Destroy the consumer and producer
+    rd_kafka_destroy(consumer);
+    rd_kafka_destroy(producer);
+
+    // close socket
     close(server_socket);
 
+    // delete hashmap
     hashmap_table_destroy(map_ipdb);
     map_ipdb = NULL;
-
     hashmap_table_destroy(map_mydb);
     map_mydb = NULL;
     
