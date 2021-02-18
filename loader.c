@@ -95,7 +95,7 @@ loader_return_type_e load_location_csv_to_hashmap(char *path, void *map_geoid)
     return LOADER_SUCCESS;
 }
 
-loader_return_type_e load_ipdb_csv_to_hashmap(char *path, void *map_ipdb, void *map_geoid)
+loader_return_type_e load_ipdb_csv_to_hashmap(char *path, void *map_ipdb, void *map_geoid, lpm_trie_node_t *trie_root)
 {
     FILE *fp = fopen(path, "r");
     if(fp == NULL) {
@@ -178,6 +178,7 @@ loader_return_type_e load_ipdb_csv_to_hashmap(char *path, void *map_ipdb, void *
         }
         
         hashmap_insert(map_ipdb, key, value);
+        lpm_insert(trie_root, key);
         fflush(fp);
     }
 
@@ -189,7 +190,7 @@ loader_return_type_e load_ipdb_csv_to_hashmap(char *path, void *map_ipdb, void *
     return LOADER_SUCCESS;
 }
 
-loader_return_type_e load_mydb_csv_to_hashmap(char *path, void *map_mydb)
+loader_return_type_e load_mydb_csv_to_hashmap(char *path, void *map_mydb, lpm_trie_node_t *trie_root)
 {
     FILE *fp = fopen(path, "r");
     if(fp == NULL) {
@@ -226,6 +227,7 @@ loader_return_type_e load_mydb_csv_to_hashmap(char *path, void *map_mydb)
         }       
 
         hashmap_insert(map_mydb, key, value);
+        lpm_insert(trie_root, key);
         fflush(fp);
     }
 

@@ -2,6 +2,7 @@
 #define _LOADER_H_
 
 #include "hashmap.h"
+#include "lpm.h"
 
 typedef enum loader_return_type_e {
     LOADER_SUCCESS = 0,
@@ -26,7 +27,7 @@ loader_return_type_e load_location_csv_to_hashmap(char *path, void *map_geoid);
   * @para_in    map_geoid   A pointer to the geoid table handler
   * @return LOADER_SUCCESS, LOADER_PATH_NOT_FOUND
 */
-loader_return_type_e load_ipdb_csv_to_hashmap(char *path, void *map_ipdb, void *map_geoid);
+loader_return_type_e load_ipdb_csv_to_hashmap(char *path, void *map_ipdb, void *map_geoid, lpm_trie_node_t *trie_root);
 
 /** load_mydb_csv_to_hashmap
   * 
@@ -35,7 +36,7 @@ loader_return_type_e load_ipdb_csv_to_hashmap(char *path, void *map_ipdb, void *
   * @para_in    map_mydb    A pointer to the mydb table handler
   * @return LOADER_SUCCESS, LOADER_PATH_NOT_FOUND
 */
-loader_return_type_e load_mydb_csv_to_hashmap(char *path, void *map_mydb);
+loader_return_type_e load_mydb_csv_to_hashmap(char *path, void *map_mydb, lpm_trie_node_t *trie_root);
 
 /** save_hashmap_mydb_to_csv
   * 

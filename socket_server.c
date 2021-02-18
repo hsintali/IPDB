@@ -1,6 +1,7 @@
 #include "hashmap.h"
 #include "loader.h"
 #include "ipdb_protocol.h"
+#include "lpm.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -31,37 +32,25 @@ static char return_message[][30] = {"SUCCESS",
                                     "KEY INVALID",
                                     "VALUE INVALID",
                                     "TABLE INVALID"};
+
 static volatile sig_atomic_t run = 1;
-const char *brokers = "localhost";
-const char *input_topic = "prefixes";
-const char *output_topic = "location";
+static const char *brokers = "localhost";
+static const char *input_topic = "prefixes";
+static const char *output_topic = "location";
+
+static lpm_trie_node_t *trie;
 
 
-                                    
 /***************************** private function declare **********************************/
 static int connection_handler(int client_socket);
 static int receive_message(int socket_id, char *opcode, char *key, char *value);
 static void operate(char opcode, char *key, char *value, char *response);
+
 static void stop(int sig);
 
-/**
- * @brief Create the input consumer.
- */
 static rd_kafka_t* create_input_consumer(const char *brokers, const char *input_topic);
-
-/**
- * @brief Process a message
- */
 static const char* process_message(rd_kafka_message_t *message);
-
-/**
- * @brief Message delivery report callback.
- */
 static void dr_msg_cb(rd_kafka_t *rk, const rd_kafka_message_t *message, void *opaque);
-
-/**
- * @brief Create a producer.
- */
 static rd_kafka_t* create_output_producer(const char *brokers, const char *output_topic);
 
 
@@ -113,24 +102,36 @@ static void operate(char opcode, char *key, char *value, char *response)
     switch(opcode) {
         case 'C': {
             const char *search_value = NULL;
+
             status = hashmap_search(map_ipdb, key, &search_value);
             if(status == SUCCESS) {
                 sprintf(response, "Insert with key(%s) and value(%s) - %s!", key, value, return_message[2]);
                 return;
             }
+
             status = hashmap_insert(map_mydb, key, value);
             sprintf(response, "Insert with key(%s) and value(%s) - %s!", key, value, return_message[status]);
+            if(status == SUCCESS) {
+                printf("lpm_insert:%d\n", lpm_insert(trie, key));
+            }
+
             break;
         }
         case 'R': {
+            const char *lpm_value = NULL;
+            printf("lpm_search:%d\n", lpm_search(trie, key, &lpm_value));
+            printf("Longest Prefix Match Value: %s\n", lpm_value);
+
             const char *search_value = NULL;
-            status = hashmap_search(map_mydb, key, &search_value);
+            status = hashmap_search(map_mydb, lpm_value, &search_value);
             if(status == SUCCESS) {
                 sprintf(response, "Search with key(%s) - %s! The value is: \"%s\"", key, return_message[status], search_value);
                 return;
             }
-            status = hashmap_search(map_ipdb, key, &search_value);
+
+            status = hashmap_search(map_ipdb, lpm_value, &search_value);
             sprintf(response, "Search with key(%s) - %s! The value is: \"%s\"", key, return_message[status], search_value);
+            
             break;
         }
         case 'U': {
@@ -139,11 +140,13 @@ static void operate(char opcode, char *key, char *value, char *response)
                 sprintf(response, "Update with key(%s) and value(%s) - %s!", key, value, return_message[status]);
                 return;
             }
+            
             status = hashmap_update(map_ipdb, key, value);
             if(status == SUCCESS) {
                 hashmap_insert(map_mydb, key, value);
             }
             sprintf(response, "Update with key(%s) and value(%s) - %s!", key, value, return_message[status]);
+            
             break;
         }
         case 'D': {
@@ -155,6 +158,9 @@ static void operate(char opcode, char *key, char *value, char *response)
             else {
                 sprintf(response, "Delete with key(%s) - %s!", key, return_message[status]);
             }
+            
+            printf("lpm_delete:%d\n", lpm_delete(trie, key));
+ 
             break;
         }
         case 'S': {
@@ -207,7 +213,6 @@ static rd_kafka_t *create_input_consumer(const char *brokers, const char *input_
         fprintf(stderr, "Failed to create consumer: %s", err_str);
     }
 
-    // rd_kafka_conf_destroy(config);
     config = NULL;
 
     rd_kafka_poll_set_consumer(kafka_handler);
@@ -229,29 +234,34 @@ static rd_kafka_t *create_input_consumer(const char *brokers, const char *input_
 
 static const char* process_message(rd_kafka_message_t *message)
 {
+    if(!message) {
+        return NULL;
+    }
+
+    if (message->err) {
+        fprintf(stderr, "%% Consumer error: %s\n", rd_kafka_message_errstr(message));
+        rd_kafka_message_destroy(message);
+        return NULL;
+    }
+    printf("%% Message on %s [%"PRId32"] at offset %"PRId64":\n", rd_kafka_topic_name(message->rkt), message->partition, message->offset);
+
+    if(message->key) {
+        printf("%% Key: %.*s (%d bytes)\n", (int)message->key_len, (const char *)message->key, (int)message->key_len);
+    }
+    if(message->payload) {
+        printf("%% Value: %.*s (%d bytes)\n", (int)message->len, (const char *)message->payload, (int)message->len);
+    }
+
+    // lookup hashmap
+    const char *lpm_value = NULL;
+    lpm_search(trie, (const char *)message->payload, &lpm_value);
+    printf("%% Longest Prefix Match Value: %s\n", lpm_value);
+
     const char *search_value = NULL;
-
-    if(message) {
-        if (message->err) {
-            fprintf(stderr, "%% Consumer error: %s\n", rd_kafka_message_errstr(message));
-            rd_kafka_message_destroy(message);
-            return NULL;
-        }
-        printf("%% Message on %s [%"PRId32"] at offset %"PRId64":\n", rd_kafka_topic_name(message->rkt), message->partition, message->offset);
-
-        if(message->key) {
-            printf("%% Key: %.*s (%d bytes)\n", (int)message->key_len, (const char *)message->key, (int)message->key_len);
-        }
-        if(message->payload) {
-            printf("%% Value: %.*s (%d bytes)\n", (int)message->len, (const char *)message->payload, (int)message->len);
-        }
-
-        // lookup hashmap
-        return_type_e status;
-        status = hashmap_search(map_mydb, (const char *)message->payload, &search_value);
-        if(status != SUCCESS) {
-            status = hashmap_search(map_ipdb, (const char *)message->payload, &search_value);
-        }
+    return_type_e status;
+    status = hashmap_search(map_mydb, lpm_value, &search_value);
+    if(status != SUCCESS) {
+        status = hashmap_search(map_ipdb, lpm_value, &search_value);
     }
 
     return search_value;
@@ -287,7 +297,6 @@ static rd_kafka_t* create_output_producer(const char *brokers, const char *outpu
         fprintf(stderr, "Failed to create consumer: %s", err_str);
     }
 
-    // rd_kafka_conf_destroy(config);
     config = NULL;
 
     return kafka_handler;
@@ -306,6 +315,9 @@ int main(int argc, char **args)
     map_ipdb = hashmap_table_create(map_size);
     map_mydb = hashmap_table_create(map_size);
 
+    // trie
+    trie = lpm_create_node();
+
     // load location csv to hashmap
     printf("Loading geoid data ...");
     char geoid_path[256];
@@ -313,25 +325,31 @@ int main(int argc, char **args)
     if(load_location_csv_to_hashmap(geoid_path, map_geoid) != LOADER_SUCCESS) {
         printf("GeoID: %s - PATH NOT FOUND!\n", geoid_path);
     }
-    printf("OK\n");
+    else {
+        printf("OK\n");
+    }
     
     // load ipv4 csv to hashmap with mapped geoid
     printf("Loading ipv4 data ...");
     char ipv4_path[256];
     sprintf(ipv4_path, "%s/%s", args[1], args[2]);
-    if(load_ipdb_csv_to_hashmap(ipv4_path, map_ipdb, map_geoid) != LOADER_SUCCESS) {
+    if(load_ipdb_csv_to_hashmap(ipv4_path, map_ipdb, map_geoid, trie) != LOADER_SUCCESS) {
         printf("IPv4: %s - PATH NOT FOUND!\n", ipv4_path);
     }
-    printf("OK\n");
+    else {
+        printf("OK\n");
+    }
 
     // load ipv6 csv to hashmap with mapped geoid
     printf("Loading ipv6 data ...");
     char ipv6_path[256];
     sprintf(ipv6_path, "%s/%s", args[1], args[3]);
-    if(load_ipdb_csv_to_hashmap(ipv6_path, map_ipdb, map_geoid) != LOADER_SUCCESS) {
+    if(load_ipdb_csv_to_hashmap(ipv6_path, map_ipdb, map_geoid, trie) != LOADER_SUCCESS) {
         printf("IPv6: %s - PATH NOT FOUND!\n", ipv6_path);
     }
-    printf("OK\n");
+    else {
+        printf("OK\n");
+    }
     
     hashmap_table_destroy(map_geoid);
     map_geoid = NULL;
@@ -339,11 +357,13 @@ int main(int argc, char **args)
     // load mydb
     printf("Loading mydb data ...");
     sprintf(mydb_path, "%s/mydb.csv", args[1]);
-    if(load_mydb_csv_to_hashmap(mydb_path, map_mydb) != LOADER_SUCCESS) {
+    if(load_mydb_csv_to_hashmap(mydb_path, map_mydb, trie) != LOADER_SUCCESS) {
         printf("mydb: PATH NOT FOUND!\n");
     }
-    printf("OK\n");
-
+    else {
+        printf("OK\n");
+    }
+    
     printf("Total %d records in ipdb\n", hashmap_get_size(map_ipdb) + hashmap_get_size(map_mydb));
 
     // create server socket

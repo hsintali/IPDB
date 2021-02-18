@@ -239,7 +239,7 @@ return_type_e hashmap_get_bucket(void *table_handler, int index, char *buffer)
     while(node != NULL) {
         sprintf(buffer, "%s%s %s\n", buffer, node->key, node->value);
         node = node->next;
-    }       
+    }
 
     return SUCCESS;
 }
