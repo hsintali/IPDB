@@ -18,6 +18,10 @@
 #include <librdkafka/rdkafka.h>
 
 
+/********************************* attributes *********************************/
+static const char *KAFKA_NULL_MESSAGE = "No Data";
+
+
 /***************************** private attribute **********************************/
 static void *map_ipdb;
 static void *map_mydb;
@@ -118,7 +122,7 @@ static void __operate(char opcode, char *key, char *value, char *response)
         }
         case 'R': {
             const char *lpm_value = NULL;
-            printf("lpm_search:%d\n", lpm_search(trie, key, &lpm_value));
+            lpm_search(trie, key, &lpm_value);
             printf("Longest Prefix Match Value: %s\n", lpm_value);
 
             const char *search_value = NULL;
@@ -444,7 +448,13 @@ int main(int argc, char **args)
         // kafka consume/process message
         rd_kafka_message_t *input_message;
         input_message = rd_kafka_consumer_poll(consumer, 0);
-        const char *out_message_ptr = __process_message(input_message);
+        const char *out_message_ptr = NULL;
+        if(input_message) {
+            out_message_ptr = __process_message(input_message);
+            if(out_message_ptr == NULL) {
+                out_message_ptr = KAFKA_NULL_MESSAGE;
+            }
+        }
 
         // kafka produce message
         if(out_message_ptr) {
