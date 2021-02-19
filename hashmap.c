@@ -18,7 +18,13 @@ typedef struct {
     hashmap_node_t **buckets;
 } hashmap_table_t;
 
-/***************************** private members **********************************/
+
+/********************************* attributes *********************************/
+const static int HASH_PRIME = 37;
+const static int DEFAULT_CAPACITY = 256;
+
+
+/***************************** private function declare **********************************/
 static hashmap_node_t* __hashmap_node_create(const char * const key, const char * const value);
 static void __hashmap_node_delete(hashmap_node_t *node);
 
@@ -28,9 +34,88 @@ static hashmap_node_t* __hashmap_find_item_node(hashmap_table_t *table, const ch
 static unsigned long long int __fast_pow(const int x, const unsigned int n);
 static int __hashmap_hash(const char * const str, const unsigned int prime, const unsigned int capacity);
 
-/********************************* attributes *********************************/
-const static int HASH_PRIME = 37;
-const static int DEFAULT_CAPACITY = 256;
+
+/***************************** private function definition **********************************/
+static hashmap_node_t* __hashmap_node_create(const char * const key, const char * const value)
+{
+    hashmap_node_t *node = malloc(sizeof(hashmap_node_t));
+    node->next = NULL;
+    node->key = NULL;
+    node->value = NULL;
+    node->str_length = 0;
+
+    if(key == NULL) {
+        return node;
+    }
+    
+    node->key = strdup(key);
+    node->value = strdup(value);
+    node->str_length = strlen(value);
+
+    return node;
+}
+
+static void __hashmap_node_delete(hashmap_node_t *node)
+{
+    if(node->key) {
+        free(node->key);
+    }
+
+    if(node->value) {
+        free(node->value);
+    }
+
+    if(node) {
+        free(node);
+    }
+}
+
+static hashmap_node_t* __hashmap_find_item_node(hashmap_table_t *table, const char * const key)
+{
+    int index = __hashmap_hash(key, HASH_PRIME, table->capacity);
+    hashmap_node_t *node = table->buckets[index];
+
+    while(node != NULL) {
+        if(node->key != NULL && strcmp(node->key, key) == 0) {
+            break;
+        }
+        node = node->next;
+    }
+
+    return node;
+}
+
+static unsigned long long int __fast_pow(int x, const unsigned int n)
+{
+    unsigned int N = n;    
+    unsigned long long int ans = 1;
+    unsigned long long int product = x;
+
+    while(N > 0) {
+        if(N % 2 == 1) {
+            ans *= product;
+        }
+        
+        N /= 2;
+        product *= product;
+    }
+
+    return ans;
+}
+
+static int __hashmap_hash(const char * const s, const unsigned int prime, const unsigned int capacity)
+{
+    unsigned long long int hash = 0;
+    const int str_length = strlen(s);
+
+    for(unsigned int i = 0; i < str_length; ++i) {
+        hash += (unsigned long long int) __fast_pow(prime, str_length - i - 1) * s[i];
+        hash %= capacity;
+    } 
+    
+    return hash;
+}
+
 
 /********************************* APIs *********************************/
 void* hashmap_table_create(unsigned int capacity)
@@ -246,85 +331,8 @@ return_type_e hashmap_get_bucket(void *table_handler, int index, char *buffer)
 
 int hashmap_get_size(void *table_handler)
 {
+    if(table_handler == NULL) {
+        return -1;
+    }
     return ((hashmap_table_t *)table_handler)->size;
-}
-/***************************** private members **********************************/
-static hashmap_node_t* __hashmap_node_create(const char * const key, const char * const value)
-{
-    hashmap_node_t *node = malloc(sizeof(hashmap_node_t));
-    node->next = NULL;
-    node->key = NULL;
-    node->value = NULL;
-    node->str_length = 0;
-
-    if(key == NULL) {
-        return node;
-    }
-    
-    node->key = strdup(key);
-    node->value = strdup(value);
-    node->str_length = strlen(value);
-
-    return node;
-}
-
-static void __hashmap_node_delete(hashmap_node_t *node)
-{
-    if(node->key) {
-        free(node->key);
-    }
-
-    if(node->value) {
-        free(node->value);
-    }
-
-    if(node) {
-        free(node);
-    }
-}
-
-static hashmap_node_t* __hashmap_find_item_node(hashmap_table_t *table, const char * const key)
-{
-    int index = __hashmap_hash(key, HASH_PRIME, table->capacity);
-    hashmap_node_t *node = table->buckets[index];
-
-    while(node != NULL) {
-        if(node->key != NULL && strcmp(node->key, key) == 0) {
-            break;
-        }
-        node = node->next;
-    }
-
-    return node;
-}
-
-static unsigned long long int __fast_pow(int x, const unsigned int n)
-{
-    unsigned int N = n;    
-    unsigned long long int ans = 1;
-    unsigned long long int product = x;
-
-    while(N > 0) {
-        if(N % 2 == 1) {
-            ans *= product;
-        }
-        
-        N /= 2;
-        product *= product;
-    }
-
-    return ans;
-}
-
-static int __hashmap_hash(const char * const s, const unsigned int prime, const unsigned int capacity)
-{
-    unsigned long long int hash = 0;
-    const int str_length = strlen(s);
-
-    for(unsigned int i = 0; i < str_length; ++i) {
-        hash += (unsigned long long int) __fast_pow(prime, str_length - i - 1) * s[i];
-        hash %= capacity;
-    } 
-    
-    return hash;
 }

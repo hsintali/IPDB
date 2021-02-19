@@ -4,7 +4,6 @@
 #include <stdlib.h>
 #include <stdint.h>
 
-
 typedef struct {
     size_t packet_length;
     char opcode;
@@ -12,7 +11,6 @@ typedef struct {
     uint8_t value_length;
     char data[0];
 } ipdb_message_t;
-
 
 /** ipdb_serialized_message
   * 
@@ -29,8 +27,5 @@ void ipdb_serialized_message(ipdb_message_t *message, char opcode, char *key, ch
   * @return
 */
 void ipdb_deserialized_message(ipdb_message_t *message, char *opcode, char *key, char *value);
-
-
-
 
 #endif

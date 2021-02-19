@@ -184,6 +184,14 @@ void * lpm_trie_init()
 
 lpm_return_type_e lpm_insert(void *trie_hadnler, const char *key)
 {
+	if(trie_hadnler == NULL) {
+        return LPM_TRIE_INVALID;
+    }
+
+    if(key == NULL) {
+        return LPM_KEY_INVALID;
+    }
+
 	lpm_trie_t *trie = (lpm_trie_t *)trie_hadnler;
 
 	// convert to binary
@@ -191,7 +199,7 @@ lpm_return_type_e lpm_insert(void *trie_hadnler, const char *key)
 	size_t key_binary_len = 0;
 	unsigned int prefix_len;
     if(__ip_to_bin_str(key, key_binary, &key_binary_len, &prefix_len) != 0) {
-		return LPM_FAILED;
+		return LPM_KEY_INVALID;
 	}
 
     int length = strlen(key_binary);
@@ -210,7 +218,7 @@ lpm_return_type_e lpm_insert(void *trie_hadnler, const char *key)
     }
 
 	if(cur_node->is_prefix != false || cur_node->prefix != NULL) {
-		return LPM_FAILED;
+		return LPM_KEY_EXISTS;
 	}
 
 	cur_node->is_prefix = true;
@@ -221,6 +229,14 @@ lpm_return_type_e lpm_insert(void *trie_hadnler, const char *key)
 
 lpm_return_type_e lpm_search(void *trie_hadnler, const char *key, const char **value)
 {
+	if(trie_hadnler == NULL) {
+        return LPM_TRIE_INVALID;
+    }
+
+    if(key == NULL) {
+        return LPM_KEY_INVALID;
+    }
+
 	lpm_trie_t *trie = (lpm_trie_t *)trie_hadnler;
 
 	*value = NULL;
@@ -230,7 +246,7 @@ lpm_return_type_e lpm_search(void *trie_hadnler, const char *key, const char **v
 	size_t key_binary_len = 0;
 	unsigned int prefix_len;
 	if(__ip_to_bin_str(key, key_binary, &key_binary_len, &prefix_len) != 0) {
-		return LPM_FAILED;
+		return LPM_KEY_INVALID;
 	}
 
 	int cnt = 0;
@@ -258,7 +274,7 @@ lpm_return_type_e lpm_search(void *trie_hadnler, const char *key, const char **v
 	}
 
 	if(*value == NULL) {
-		return LPM_FAILED;
+		return LPM_KEY_NOT_FOUND;
 	}
 
 	return LPM_SUCCESS;
@@ -266,6 +282,14 @@ lpm_return_type_e lpm_search(void *trie_hadnler, const char *key, const char **v
 
 lpm_return_type_e lpm_delete(void *trie_hadnler, const char *key)
 {
+	if(trie_hadnler == NULL) {
+        return LPM_TRIE_INVALID;
+    }
+
+    if(key == NULL) {
+        return LPM_KEY_INVALID;
+    }
+
 	lpm_trie_t *trie = (lpm_trie_t *)trie_hadnler;
 
 	// convert to binary
@@ -273,7 +297,7 @@ lpm_return_type_e lpm_delete(void *trie_hadnler, const char *key)
 	size_t key_binary_len = 0;
 	unsigned int prefix_len;
     if(__ip_to_bin_str(key, key_binary, &key_binary_len, &prefix_len) != 0) {
-		return LPM_FAILED;
+		return LPM_KEY_INVALID;
 	}
 
 	// determine if key exists
@@ -285,12 +309,12 @@ lpm_return_type_e lpm_delete(void *trie_hadnler, const char *key)
     {
         index = key_binary[i] - '0';
         if (!cur_node->next[index]) {
-			return LPM_FAILED;
+			return LPM_KEY_NOT_FOUND;
 		}
         cur_node = cur_node->next[index];
     }
 	if(cur_node == NULL || !cur_node->is_prefix) {
-		return LPM_FAILED;
+		return LPM_KEY_NOT_FOUND;
 	}
 
 	__recursive_delete(root, key_binary, 0);

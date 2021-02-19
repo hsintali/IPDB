@@ -6,7 +6,10 @@
 
 typedef enum lpm_return_type_e {
     LPM_SUCCESS = 0,
-    LPM_FAILED = 1,
+    LPM_KEY_NOT_FOUND = 1,
+    LPM_KEY_EXISTS = 2,
+    LPM_KEY_INVALID = 3,
+    LPM_TRIE_INVALID = 4,
 } lpm_return_type_e;
 
 /********************************* APIs *********************************/

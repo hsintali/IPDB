@@ -6,17 +6,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/select.h>
+#include <sys/time.h>
+#include <signal.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
-
-#include <sys/time.h>
-#include <signal.h>
-#include <ctype.h>
-
 #include <librdkafka/rdkafka.h>
 
 
@@ -38,37 +36,38 @@ static const char *brokers = "localhost";
 static const char *input_topic = "prefixes";
 static const char *output_topic = "location";
 
-static lpm_trie_node_t *trie;
+static void *trie;
 
 
 /***************************** private function declare **********************************/
-static int connection_handler(int client_socket);
-static int receive_message(int socket_id, char *opcode, char *key, char *value);
-static void operate(char opcode, char *key, char *value, char *response);
+static int __connection_handler(int client_socket);
+static int __receive_message(int socket_id, char *opcode, char *key, char *value);
+static void __operate(char opcode, char *key, char *value, char *response);
 
-static void stop(int sig);
+static void __stop(int sig);
 
-static rd_kafka_t* create_input_consumer(const char *brokers, const char *input_topic);
-static const char* process_message(rd_kafka_message_t *message);
-static void dr_msg_cb(rd_kafka_t *rk, const rd_kafka_message_t *message, void *opaque);
-static rd_kafka_t* create_output_producer(const char *brokers, const char *output_topic);
+static rd_kafka_t * __create_input_consumer(const char *brokers, const char *input_topic);
+static const char * __process_message(rd_kafka_message_t *message);
+static void __dr_msg_cb(rd_kafka_t *rk, const rd_kafka_message_t *message, void *opaque);
+static rd_kafka_t * __create_output_producer(const char *brokers);
+static void __produce_message(rd_kafka_t *producer, const rd_kafka_message_t *input_message, char *out_message, const char *output_topic);
 
 
 /***************************** private function definition **********************************/
-static int connection_handler(int client_socket)
+static int __connection_handler(int client_socket)
 {
     char opcode = '\0';
     char key[buffer_size];
     char value[buffer_size];
    
-    if(receive_message(client_socket, &opcode, key, value) != 0) {
+    if(__receive_message(client_socket, &opcode, key, value) != 0) {
         return -1;
     }
     printf("(Client - %d): opcode:%c, key:%s(%d), value:%s(%d)\n", client_socket, opcode, key, strlen(key), value, strlen(value));
     
     char response[message_size];
 
-    operate(opcode, key, value, response);
+    __operate(opcode, key, value, response);
 
     send(client_socket, response, sizeof(response), 0);
     printf("(Client - %d): response: %s\n", client_socket, response);
@@ -76,7 +75,7 @@ static int connection_handler(int client_socket)
     return 0;
 }
 
-static int receive_message(int socket_id, char *opcode, char *key, char *value)
+static int __receive_message(int socket_id, char *opcode, char *key, char *value)
 {
     char buffer[buffer_size];
 
@@ -95,7 +94,7 @@ static int receive_message(int socket_id, char *opcode, char *key, char *value)
     return 0;
 }
 
-static void operate(char opcode, char *key, char *value, char *response)
+static void __operate(char opcode, char *key, char *value, char *response)
 {
     return_type_e status, status_mydb;
 
@@ -177,12 +176,12 @@ static void operate(char opcode, char *key, char *value, char *response)
     }
 }
 
-static void stop (int sig)
+static void __stop (int sig)
 {
     run = 0;
 }
 
-static rd_kafka_t *create_input_consumer(const char *brokers, const char *input_topic)
+static rd_kafka_t * __create_input_consumer(const char *brokers, const char *input_topic)
 {
     rd_kafka_t *kafka_handler;
     rd_kafka_conf_t *config = rd_kafka_conf_new();
@@ -232,7 +231,7 @@ static rd_kafka_t *create_input_consumer(const char *brokers, const char *input_
     return kafka_handler;
 }
 
-static const char* process_message(rd_kafka_message_t *message)
+static const char * __process_message(rd_kafka_message_t *message)
 {
     if(!message) {
         return NULL;
@@ -252,11 +251,12 @@ static const char* process_message(rd_kafka_message_t *message)
         printf("%% Value: %.*s (%d bytes)\n", (int)message->len, (const char *)message->payload, (int)message->len);
     }
 
-    // lookup hashmap
+    // longest prefix matching
     const char *lpm_value = NULL;
     lpm_search(trie, (const char *)message->payload, &lpm_value);
     printf("%% Longest Prefix Match Value: %s\n", lpm_value);
 
+    // lookup hashmap
     const char *search_value = NULL;
     return_type_e status;
     status = hashmap_search(map_mydb, lpm_value, &search_value);
@@ -267,7 +267,7 @@ static const char* process_message(rd_kafka_message_t *message)
     return search_value;
 }
 
-static void dr_msg_cb(rd_kafka_t *rk, const rd_kafka_message_t *message, void *opaque) {
+static void __dr_msg_cb(rd_kafka_t *rk, const rd_kafka_message_t *message, void *opaque) {
     if (message->err) {
         fprintf(stderr, "%% Message delivery failed: %s\n", rd_kafka_err2str(message->err));
     }
@@ -276,7 +276,7 @@ static void dr_msg_cb(rd_kafka_t *rk, const rd_kafka_message_t *message, void *o
     }
 }
 
-static rd_kafka_t* create_output_producer(const char *brokers, const char *output_topic)
+static rd_kafka_t * __create_output_producer(const char *brokers)
 {
     rd_kafka_t *kafka_handler;
     rd_kafka_conf_t *config = rd_kafka_conf_new();
@@ -289,7 +289,7 @@ static rd_kafka_t* create_output_producer(const char *brokers, const char *outpu
         return NULL;
     }
 
-    rd_kafka_conf_set_dr_msg_cb(config, dr_msg_cb);
+    rd_kafka_conf_set_dr_msg_cb(config, __dr_msg_cb);
 
     kafka_handler = rd_kafka_new(RD_KAFKA_PRODUCER, config, err_str, sizeof(err_str));
     if (!kafka_handler) {
@@ -301,6 +301,35 @@ static rd_kafka_t* create_output_producer(const char *brokers, const char *outpu
 
     return kafka_handler;
 }
+
+static void __produce_message(rd_kafka_t *producer, const rd_kafka_message_t *input_message, char *out_message, const char *output_topic)
+{
+    if(out_message == NULL) {
+        return;
+    }
+
+    rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_INVALID_MSG;
+
+    while(err != RD_KAFKA_RESP_ERR_NO_ERROR) {
+        err = rd_kafka_producev(producer, RD_KAFKA_V_TOPIC(output_topic),
+                                            RD_KAFKA_V_KEY(input_message->payload, input_message->len),
+                                            RD_KAFKA_V_VALUE(out_message, strlen(out_message)),
+                                            RD_KAFKA_V_END);
+        if(err == RD_KAFKA_RESP_ERR__QUEUE_FULL) {
+            rd_kafka_poll(producer, 100);
+            continue;
+        }
+        else if(err) {
+            fprintf(stderr, "%% Failed to produce to topic %s: %s\n", output_topic, rd_kafka_err2str(err));
+            break;
+        }
+        else {
+            fprintf(stderr, "%% Enqueued message %s (%zd bytes) for topic %s\n", out_message, strlen(out_message), output_topic);
+        }
+    }
+}
+
+
 /***************************** main **********************************/
 int main(int argc, char **args)
 {
@@ -316,7 +345,7 @@ int main(int argc, char **args)
     map_mydb = hashmap_table_create(map_size);
 
     // trie
-    trie = lpm_create_node();
+    trie = lpm_trie_init();
 
     // load location csv to hashmap
     printf("Loading geoid data ...");
@@ -395,7 +424,7 @@ int main(int argc, char **args)
     fd_set active_fd_set, read_fd_set;
     FD_ZERO(&active_fd_set);
     FD_SET(server_socket,&active_fd_set);
-    struct timeval timeout = {0, 1};
+    struct timeval timeout = {0, 0};
 
     // client socket
     int client_socket = 0;
@@ -404,39 +433,28 @@ int main(int argc, char **args)
 
     // kafka
     rd_kafka_t *consumer, *producer;
-    consumer = create_input_consumer(brokers, input_topic);
-    producer = create_output_producer(brokers, output_topic);
+    consumer = __create_input_consumer(brokers, input_topic);
+    producer = __create_output_producer(brokers);
+    char out_message[message_size];
  
     /* Signal handler for clean shutdown */
-    signal(SIGINT, stop);
+    signal(SIGINT, __stop);
 
     while(run) {
         // kafka consume/process message
         rd_kafka_message_t *input_message;
-        input_message = rd_kafka_consumer_poll(consumer, 1);
-        const char *out_message = process_message(input_message);
+        input_message = rd_kafka_consumer_poll(consumer, 0);
+        const char *out_message_ptr = __process_message(input_message);
 
         // kafka produce message
-        rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_INVALID_MSG;
-        while(err != RD_KAFKA_RESP_ERR_NO_ERROR && out_message != NULL) {
-            err = rd_kafka_producev(producer, RD_KAFKA_V_TOPIC(output_topic),
-                                              RD_KAFKA_V_KEY(input_message->payload, input_message->len),
-                                              RD_KAFKA_V_VALUE(out_message, strlen(out_message)),
-                                              RD_KAFKA_V_END);
-            if(err == RD_KAFKA_RESP_ERR__QUEUE_FULL) {
-                rd_kafka_poll(producer, 100);
-                continue;
-            }
-            else if(err) {
-                fprintf(stderr, "%% Failed to produce to topic %s: %s\n", output_topic, rd_kafka_err2str(err));
-                break;
-            }
-            else {
-                fprintf(stderr, "%% Enqueued message %s (%zd bytes) for topic %s\n", out_message, strlen(out_message), output_topic);
-            }
+        if(out_message_ptr) {
+            strcpy(out_message, out_message_ptr);
+            __produce_message(producer, input_message, out_message, output_topic);
         }
         rd_kafka_poll(producer, 0);
-        if(input_message) rd_kafka_message_destroy(input_message);
+        if(input_message) {
+            rd_kafka_message_destroy(input_message);
+        }
         
         // set select read_fd_set
         read_fd_set = active_fd_set;
@@ -459,11 +477,11 @@ int main(int argc, char **args)
                     FD_SET(client_socket, &active_fd_set);
 
                      // send welcome message to the client
-                    char *welcome_message = "Hi there! I am your connection handler.\nPlease send me the operating message to operate IPDB.\n";
+                    char *welcome_message = "Hi there! I am your connection handler.\nPlease send me the operating message to __operate IPDB.\n";
                     send(client_socket, welcome_message, strlen(welcome_message), 0);
                 }
                 else { // processing received message
-                    if(connection_handler(i) != 0) {
+                    if(__connection_handler(i) != 0) {
                         close(i);
                         FD_CLR(i, &active_fd_set);
                         printf("(Client - %d): close connection\n", i);

@@ -1,14 +1,12 @@
 #include "ipdb_protocol.h"
 
-
 #include <string.h>
 #include <stdio.h>
 
 
-static char buffer[1024];
-
 void ipdb_serialized_message(ipdb_message_t *message, char opcode, char *key, char *value)
 {
+    char buffer[1024];
     uint8_t key_length = strlen(key);
     uint8_t value_length = strlen(value);
     message->packet_length = sizeof(ipdb_message_t) + key_length + value_length;
