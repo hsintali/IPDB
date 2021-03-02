@@ -45,7 +45,6 @@ static void *trie;
 
 /***************************** private function declare **********************************/
 static int __connection_handler(int client_socket);
-static int __receive_message(int socket_id, char *opcode, char *key, char *value);
 static void __operate(char opcode, char *key, char *value, char *response);
 
 static void __stop(int sig);
@@ -64,9 +63,11 @@ static int __connection_handler(int client_socket)
     char key[buffer_size];
     char value[buffer_size];
    
-    if(__receive_message(client_socket, &opcode, key, value) != 0) {
+    char recv_buffer[sizeof(ipdb_message_t)];
+    if(recv(client_socket, recv_buffer, sizeof(ipdb_message_t), 0) <= 0) {
         return -1;
-    }
+    };
+    ipdb_deserialized_message((ipdb_message_t *)recv_buffer, &opcode, key, value);
     printf("(Client - %d): opcode:%c, key:%s(%d), value:%s(%d)\n", client_socket, opcode, key, strlen(key), value, strlen(value));
     
     char response[message_size];
@@ -76,25 +77,6 @@ static int __connection_handler(int client_socket)
     send(client_socket, response, sizeof(response), 0);
     printf("(Client - %d): response: %s\n", client_socket, response);
 
-    return 0;
-}
-
-static int __receive_message(int socket_id, char *opcode, char *key, char *value)
-{
-    char buffer[buffer_size];
-
-    size_t header_size = sizeof(ipdb_message_t);
-    if(recv(socket_id, buffer, header_size, 0) <= 0) {
-        return -1;
-    };
-
-    size_t data_size = ((ipdb_message_t *)buffer)->packet_length - header_size;
-    if(data_size > 0 && recv(socket_id, buffer + header_size, data_size, 0) <= 0) {
-        return -1;
-    };
-  
-    ipdb_deserialized_message((ipdb_message_t *)buffer, opcode, key, value);
-        
     return 0;
 }
 
@@ -433,7 +415,7 @@ int main(int argc, char **args)
     // client socket
     int client_socket = 0;
     struct sockaddr_in client_address;
-    socklen_t client_address_size;
+    socklen_t client_address_size = sizeof((struct sockaddr_in *) &client_address);
 
     // kafka
     rd_kafka_t *consumer, *producer;
@@ -487,7 +469,7 @@ int main(int argc, char **args)
                     FD_SET(client_socket, &active_fd_set);
 
                      // send welcome message to the client
-                    char *welcome_message = "Hi there! I am your connection handler.\nPlease send me the operating message to __operate IPDB.\n";
+                    char *welcome_message = "Hi there! I am your connection handler.\nPlease send me the operating message to operate IPDB.\n";
                     send(client_socket, welcome_message, strlen(welcome_message), 0);
                 }
                 else { // processing received message

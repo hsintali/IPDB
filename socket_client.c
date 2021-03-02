@@ -41,8 +41,8 @@ int main(int argc, char **args)
     char opcode;
     char key[256];
     char value[256];
-    ipdb_message_t *message = malloc(sizeof(ipdb_message_t) + 1024);
-
+    ipdb_message_t message;
+    
     while(1) {
         printf("Opcode:");
         scanf("%s", &opcode);
@@ -66,11 +66,11 @@ int main(int argc, char **args)
             value[strlen(value) - 1] = '\0';
         }
 
-        ipdb_serialized_message(message, opcode, key, value);
+        ipdb_serialized_message(&message, opcode, key, value);
 
         // send data to the server
-        send(client_socket, message, message->packet_length, 0);
-        printf("send length: %d\n", message->packet_length);
+        send(client_socket, &message, sizeof(message), 0);
+        printf("send length: %d\n", sizeof(message));
 
         // reveive data from the server
         recv(client_socket, server_response, sizeof(server_response), 0);

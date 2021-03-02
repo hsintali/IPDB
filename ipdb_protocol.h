@@ -5,11 +5,9 @@
 #include <stdint.h>
 
 typedef struct {
-    size_t packet_length;
     char opcode;
-    uint8_t key_length;
-    uint8_t value_length;
-    char data[0];
+    char key[256];
+    char value[256];
 } ipdb_message_t;
 
 /** ipdb_serialized_message
