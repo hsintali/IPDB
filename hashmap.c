@@ -4,12 +4,27 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+
+static void* safe_malloc(size_t n, unsigned long line)
+{
+    void* p = malloc(n);
+    if (!p)
+    {
+        fprintf(stderr, "[%s:%ul]Out of memory(%ul bytes)\n",
+                __FILE__, line, (unsigned long)n);
+        exit(EXIT_FAILURE);
+    }
+    return p;
+}
+#define SAFEMALLOC(n) safe_malloc(n, __LINE__)
+
+
 /********************************* structs *********************************/
 typedef struct hashmap_node_s {
     struct hashmap_node_s *next;
     char *key;
     char *value;
-    int str_length;
+    int value_length;
 } hashmap_node_t;
 
 typedef struct {
@@ -38,11 +53,11 @@ static int __hashmap_hash(const char * const str, const unsigned int prime, cons
 /***************************** private function definition **********************************/
 static hashmap_node_t* __hashmap_node_create(const char * const key, const char * const value)
 {
-    hashmap_node_t *node = malloc(sizeof(hashmap_node_t));
+    hashmap_node_t *node = SAFEMALLOC(sizeof(hashmap_node_t));
     node->next = NULL;
     node->key = NULL;
     node->value = NULL;
-    node->str_length = 0;
+    node->value_length = 0;
 
     if(key == NULL) {
         return node;
@@ -50,7 +65,7 @@ static hashmap_node_t* __hashmap_node_create(const char * const key, const char 
     
     node->key = strdup(key);
     node->value = strdup(value);
-    node->str_length = strlen(value);
+    node->value_length = strlen(value);
 
     return node;
 }
@@ -124,11 +139,11 @@ void* hashmap_table_create(unsigned int capacity)
         capacity = DEFAULT_CAPACITY;
     }
     
-    hashmap_table_t *table = malloc(sizeof(hashmap_table_t));
+    hashmap_table_t *table = SAFEMALLOC(sizeof(hashmap_table_t));
     table->capacity = capacity;
     table->size = 0;
 
-    table->buckets = calloc(capacity, sizeof(hashmap_node_t *));
+    table->buckets = SAFEMALLOC(capacity * sizeof(hashmap_node_t *));
     for(unsigned int i = 0; i < table->capacity; ++i) {
         table->buckets[i] = __hashmap_node_create(NULL, NULL);
     }
@@ -219,7 +234,7 @@ return_type_e hashmap_update(void *table_handler, const char * const key, const 
 
     free(node->value);
     node->value = strdup(value);
-    node->str_length = strlen(value);
+    node->value_length = strlen(value);
 
     return SUCCESS;
 }
@@ -295,7 +310,7 @@ return_type_e hashmap_dump(void *table_handler)
         hashmap_node_t *node = table->buckets[i];
         if(node->next == NULL) continue;
         while(node != NULL) {
-            printf("index: %d | key: %s | value: %s | value_length: %d \n", i, node->key, node->value, node->str_length);
+            printf("index: %d | key: %s | value: %s | value_length: %d \n", i, node->key, node->value, node->value_length);
             node = node->next;
         }       
     }

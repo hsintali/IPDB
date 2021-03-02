@@ -13,7 +13,7 @@ typedef enum lpm_return_type_e {
 } lpm_return_type_e;
 
 /********************************* APIs *********************************/
-void * lpm_trie_init();
+void * lpm_trie_init(void);
 
 lpm_return_type_e lpm_insert(void *trie_hadnler, const char *key);
 

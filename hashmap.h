@@ -25,7 +25,7 @@ void* hashmap_table_create(unsigned int capacity);
   * @para_in    table_handler   A pointer to the table handler
   * @return SUCCESS, TABLE_INVALID
 */
-return_type_e hashmap_table_destroy(void *table);
+return_type_e hashmap_table_destroy(void *table_handler);
 
 /** hashmap_insert
   * Insert a key-value pair to the specific hashtable.

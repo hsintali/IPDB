@@ -6,6 +6,20 @@
 #include <arpa/inet.h>
 
 
+static void* safe_malloc(size_t n, unsigned long line)
+{
+    void* p = malloc(n);
+    if (!p)
+    {
+        fprintf(stderr, "[%s:%ul]Out of memory(%ul bytes)\n",
+                __FILE__, line, (unsigned long)n);
+        exit(EXIT_FAILURE);
+    }
+    return p;
+}
+#define SAFEMALLOC(n) safe_malloc(n, __LINE__)
+
+
 /********************************* structs *********************************/
 typedef struct lpm_trie_node_s {
     struct lpm_trie_node_s *next[2];
@@ -88,7 +102,7 @@ static int __ip_to_bin_str(const char *cidr, char *addr, size_t *len, unsigned i
 
 static lpm_trie_node_t * __create_node()
 {
-    lpm_trie_node_t *node = (lpm_trie_node_t *) malloc(sizeof(lpm_trie_node_t)); 
+    lpm_trie_node_t *node = (lpm_trie_node_t *) SAFEMALLOC(sizeof(lpm_trie_node_t)); 
 
     if(node) {  
         node->is_prefix = false;
@@ -151,9 +165,9 @@ static lpm_trie_node_t * __recursive_delete(lpm_trie_node_t *root, const char *k
 
 
 /********************************* APIs *********************************/
-void * lpm_trie_init()
+void * lpm_trie_init(void)
 {
-    lpm_trie_t *trie = (lpm_trie_t *) malloc(sizeof(lpm_trie_t));
+    lpm_trie_t *trie = (lpm_trie_t *) SAFEMALLOC(sizeof(lpm_trie_t));
     trie->root = __create_node();
 
     // convert to binary

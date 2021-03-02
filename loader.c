@@ -4,6 +4,21 @@
 #include <string.h>
 #include <stdlib.h>
 
+
+static void* safe_malloc(size_t n, unsigned long line)
+{
+    void* p = malloc(n);
+    if (!p)
+    {
+        fprintf(stderr, "[%s:%ul]Out of memory(%ul bytes)\n",
+                __FILE__, line, (unsigned long)n);
+        exit(EXIT_FAILURE);
+    }
+    return p;
+}
+#define SAFEMALLOC(n) safe_malloc(n, __LINE__)
+
+
 loader_return_type_e load_location_csv_to_hashmap(char *path, void *map_geoid)
 {
     FILE *fp = fopen(path, "r");
@@ -12,10 +27,10 @@ loader_return_type_e load_location_csv_to_hashmap(char *path, void *map_geoid)
     }
 
     size_t key_length = 10;
-    char *key = malloc(sizeof(char) * key_length);
+    char *key = SAFEMALLOC(sizeof(char) * key_length);
 
     size_t value_length = 80;
-    char *value = malloc(sizeof(char) * value_length);
+    char *value = SAFEMALLOC(sizeof(char) * value_length);
 
     char *line_buf = NULL;
     size_t line_buf_size = 0;
@@ -39,7 +54,7 @@ loader_return_type_e load_location_csv_to_hashmap(char *path, void *map_geoid)
             if(key_length < id_length) {
                 key_length = id_length;
                 free(key);
-                key = malloc(sizeof(char) * key_length);
+                key = SAFEMALLOC(sizeof(char) * key_length);
             }
 
             strncpy(key, line_buf, id_end - line_buf);
@@ -68,7 +83,7 @@ loader_return_type_e load_location_csv_to_hashmap(char *path, void *map_geoid)
             if(value_length < total_length) {
                 value_length = total_length;
                 free(value);
-                value = malloc(sizeof(char) * value_length);
+                value = SAFEMALLOC(sizeof(char) * value_length);
             }
 
             strncpy(value, country_start + 1, country_length);
@@ -103,10 +118,10 @@ loader_return_type_e load_ipdb_csv_to_hashmap(char *path, void *map_ipdb, void *
     }
 
     size_t key_length = 10;
-    char *key = malloc(sizeof(char) * key_length);
+    char *key = SAFEMALLOC(sizeof(char) * key_length);
 
     size_t value_length = 80;
-    char *value = malloc(sizeof(char) * value_length);
+    char *value = SAFEMALLOC(sizeof(char) * value_length);
 
     char *line_buf = NULL;
     size_t line_buf_size = 0;
@@ -130,7 +145,7 @@ loader_return_type_e load_ipdb_csv_to_hashmap(char *path, void *map_ipdb, void *
             if(key_length < ip_length) {
                 key_length = ip_length;
                 free(key);
-                key = malloc(sizeof(char) * key_length);
+                key = SAFEMALLOC(sizeof(char) * key_length);
             }
             
             strncpy(key, line_buf, ip_length);
@@ -148,7 +163,7 @@ loader_return_type_e load_ipdb_csv_to_hashmap(char *path, void *map_ipdb, void *
             if(value_length < geoid_length) {
                 value_length = geoid_length;
                 free(value);
-                value = malloc(sizeof(char) * value_length);
+                value = SAFEMALLOC(sizeof(char) * value_length);
             }
 
             // get geoid
@@ -169,7 +184,7 @@ loader_return_type_e load_ipdb_csv_to_hashmap(char *path, void *map_ipdb, void *
             if(value_length < country_timezone_length) {
                 value_length = country_timezone_length;
                 free(value);
-                value = malloc(sizeof(char) * value_length);
+                value = SAFEMALLOC(sizeof(char) * value_length);
             }
 
             // set country_timezone to value
@@ -198,10 +213,10 @@ loader_return_type_e load_mydb_csv_to_hashmap(char *path, void *map_mydb, void *
     }
 
     size_t key_length = 256;
-    char *key = malloc(sizeof(char) * key_length);
+    char *key = SAFEMALLOC(sizeof(char) * key_length);
 
     size_t value_length = 256;
-    char *value = malloc(sizeof(char) * value_length);
+    char *value = SAFEMALLOC(sizeof(char) * value_length);
 
     char *line_buf = NULL;
     size_t line_buf_size = 0;
