@@ -314,10 +314,11 @@ lpm_return_type_e lpm_delete(void *trie_hadnler, const char *key)
         return LPM_KEY_INVALID;
     }
 
+    lpm_trie_node_t *root = (key_binary_len == 16) ? trie->root : trie->ipv4_node;
+
     // determine if key exists
     int length = strlen(key_binary);
     int index;
-    lpm_trie_node_t *root = (key_binary_len == 16) ? trie->root : trie->ipv4_node;
     lpm_trie_node_t *cur_node = root;
     for(int i = 0; i < length; ++i)
     {
