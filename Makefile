@@ -1,4 +1,4 @@
-all: server client main
+all: server client
 	rm -f *.o
 
 server: ../kafka/librdkafka/src/librdkafka.a socket_server.c hashmap.c loader.c ipdb_protocol.c lpm.c
@@ -7,9 +7,6 @@ server: ../kafka/librdkafka/src/librdkafka.a socket_server.c hashmap.c loader.c 
 
 client: socket_client.c ipdb_protocol.c
 	gcc -o client.out socket_client.c ipdb_protocol.c
-
-main: main.c lpm.c loader.c hashmap.c
-	gcc -o main.out main.c lpm.c loader.c hashmap.c
 
 clean:
 	rm -f *.out *.o
